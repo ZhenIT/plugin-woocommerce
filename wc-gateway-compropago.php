@@ -263,7 +263,7 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 		 */ 
         return true;
     }
-	
+
 	/**
      * Payment form on checkout page
      */
@@ -388,139 +388,27 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 	function notify_handler() {
 		global $woocommerce;
 		
-		$redirect = get_permalink(woocommerce_get_page_id('cart'));
-		
-		if (isset($_GET['compropagoListener']) && $_GET['compropagoListener'] == 'compropago') {
-			if ($this->debug=='yes') {
-				$this->log->add( 'compropago', __('Post form: ', 'woocommerce') . print_r($_POST, true));
+		$body = @file_get_contents('php://input');
+		if ( !empty( $body ) ) {
+			$event_json = json_decode($body);
+			$order_id = $event_json->data->object->payment_details->{'product_id'};
+			$order = new WC_Order((int) $order_id);
+			// Check order not already completed
+			if ($order->status == 'completed'){
+				if ($this->debug=='yes') $this->log->add( 'servired', 'Aborting, Order #' . $posted['custom'] . ' is already complete.' );
+				return;
 			}
-			
-			if($woocommerce->verify_nonce('compropago_payment_submit')) {
-				$order_id = $this->get_request('order');
-				$order = new WC_Order( $order_id );
-				
-				if($order->order_key != $_REQUEST['key']) {
-					$woocommerce->add_error(__('Order key do not match!', 'woocommerce'));
-					wp_redirect($redirect); //redirect page
-					exit;
-				}
-				
-				$order_items = $order->get_items();
-				
-				$product = $order->get_product_from_item( array_pop( $order_items ) );
-				$this->product_type = $product->product_type;
-		
-				$params = $this->get_params( $order);
-				
-				if ($this->debug=='yes') 
-					$this->log->add( 'compropago', __('Post paramaters: ', 'woocommerce') . print_r($params, true));
-				
-				$request = new compropago_request($this->get_config());
-				
-				$response = '';
-				
-				if( 'subscription' == $product->product_type || 'subscription_variation' == $product->product_type ) {
-					if ($this->debug=='yes') 
-						$this->log->add( 'compropago', 'Starting subscription ... ');
-					
-					$sign_up_fee = WC_Subscriptions_Order::get_sign_up_fee( $order );
-		
-					$price_per_period = WC_Subscriptions_Order::get_price_per_period( $order );
-		
-					$subscription_interval = WC_Subscriptions_Order::get_subscription_interval( $order );
-		
-					$subscription_length = WC_Subscriptions_Order::get_subscription_length( $order );
-		
-					$subscription_trial_length = WC_Subscriptions_Order::get_subscription_trial_length( $order );
-					
-					// Subscription unit of duration
-					switch( strtolower( WC_Subscriptions_Order::get_subscription_period( $order ) ) ) {
-						case 'year':
-							$subscription_period = 'year';
-							break;
-						case 'month':
-						default:
-							$subscription_period = 'month';
-							break;
-					}
-					// add more param
-					$sparams = array();
-					
-					$plan_name = get_post($product->id)->post_title;
-					//$plan_id = $product->id;
-					$plan_id = $order_id;
-					
-					$response = $request->send($plan_id, 'retrieve');
-					
-					if(!$response->success()) { //create plan if not exists
-						if ($this->debug=='yes') 
-							$this->log->add( 'compropago', sprintf(__('Create plan id: %s', 'woocommerce'), $plan_id));
-						
-						$response = $request->send(array('amount'=> number_format($price_per_period, 2, '.', '') * 100
-							, 'interval'=>$subscription_period
-							, "currency" => $params['currency']
-							, "id" => $plan_id
-							, 'name'=> $plan_name
-							, 'trial_period_days'=> $subscription_trial_length
-						), 'plan');
-						
-					}
-					
-					if($response->success()) {
-						if ($this->debug=='yes') 
-							$this->log->add( 'compropago', print_r($response, true));
-						
-						$response = $request->send(array(
-							"card" => $params['card'],
-							"plan" => $plan_id,
-							"email" => $order->billing_email), 'customer');
-							
-						if ($this->debug=='yes') 
-							$this->log->add( 'compropago', 'Customer create: ' . print_r($response->results, true));
-						
-						if($response->success() && $sign_up_fee > 0) {
-							$response = $request->send(array(
-									"customer" => $response->results->id,
-									"amount" => number_format($sign_up_fee, 2, '.', '') * 100,
-									"currency" => $params['currency'],
-									"description" => __("Sign-up Fee", 'woocommerce')));
-								
-							if ($this->debug=='yes') 
-								$this->log->add( 'compropago', 'Sign-up fee response: ' . print_r($response->results, true));
-						} 
-						
-					} else {
-						//error
-						if ($this->debug=='yes') 
-							$this->log->add( 'compropago', __('Error can not create plan', 'woocommerce'));
-						
-						$woocommerce->add_error(__('Error can not create plan', 'woocommerce'));
-					
-					}
-					
-				} else {
-					$response = $request->send($params);
-				}
-				
-				//response result
-				if($response->success()){
-					$order->add_order_note( __('Compropago payment completed', 'woocommerce') . ' (Transaction ID: ' . $response->get_transaction_id() . ')' );
-					$order->payment_complete();
-		
-					$woocommerce->cart->empty_cart();
-					$redirect = add_query_arg('key', $order->order_key, add_query_arg('order', $order_id, get_permalink(woocommerce_get_page_id('thanks'))));
-				} else {
-					if ($this->debug=='yes') 
-						$this->log->add( 'compropago', 'Error: ' . $response->get_error(), true);
-					
-					$woocommerce->add_error(__('Payment error', 'woocommerce') . ': ' . $response->get_error() . '');
-				}
+			$status = $event_json->{'type'};
+			$order->add_order_note( __('Recibida notificación de compropago. Status:', 'wc_compropago').$status );
+			$order->payment_complete();
+
+			/* @TODO: Add some kind of verification */
+			if ( $status == 'charge.pending' ) {
+				compropago_status_function( $product_id, $status );
 			}
-			
-			wp_redirect($redirect); //redirect page
-			exit;
-		}
+			echo json_encode( $event_json );
 	}
+
 	
 	/**
 	 * When a store manager or user cancels a subscription in the store, also cancel the subscription with compropago. 
