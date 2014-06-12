@@ -3,17 +3,12 @@
  * Gateway class
  **/
 
-class WC_Gateway_Compropago extends WC_Payment_Gateway {
+class woocommerce_compropago extends WC_Payment_Gateway {
 
 	/**
 	 * Test mode
 	 */
 	var $testmode;
-	
-	/**
-	 * notify url
-	 */
-	var $notify_url;
 	
 	function __construct() { 
 		global $woocommerce;
@@ -47,19 +42,9 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 		if ($this->debug=='yes') $this->log = $woocommerce->logger();
 		
 		add_action('woocommerce_receipt_compropago', array(&$this, 'receipt_page'));
-		add_action( 'admin_notices', array( &$this, 'ssl_check') );
-		
-		$this->notify_url = add_query_arg('compropagoListener', 'compropago', get_permalink(woocommerce_get_page_id('pay')));
-		
-		if ( version_compare( WOOCOMMERCE_VERSION, '2.0.0', '<' ) ) {
-			add_action( 'woocommerce_update_options_payment_gateways', array( &$this, 'process_admin_options' ) );
-			add_action( 'init', array( $this, 'notify_handler' ) );
-		} else {
-			add_action( 'woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
-			
-			add_action( 'woocommerce_api_wc_gateway_compropago', array( &$this, 'notify_handler' ) );
-			$this->notify_url   = add_query_arg( 'wc-api', 'WC_Gateway_Compropago', $this->notify_url );
-		}
+		add_action('admin_notices', array( &$this, 'ssl_check') );
+		add_action('woocommerce_update_options_payment_gateways_' . $this->id, array( $this, 'process_admin_options' ) );
+		add_action('woocommerce_api_woocommerce_' . $this->id, array( $this, 'check_' . $this->id . '_resquest' ) );
 		
 		if ( !$this->is_valid_for_use() ) $this->enabled = false;
 		
@@ -348,7 +333,7 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 			
 			$payment_url = "https://www.compropago.com/comprobante/?public_key=".$public_key;
 			$payment_url .= "&customer_data_blocked=true";
-			$payment_url .= "&app_client_name=woocommerce";
+			$payment_url .= "&app_client_name=woocommerce_compropago";
 			$payment_url .= "&app_client_version=".WOOCOMMERCE_VERSION;
 			$payment_url .= "&customer_name=".$order->billing_first_name . " " . $order->billing_last_name;
 			$payment_url .= "&customer_email=".$order->billing_email;
@@ -356,36 +341,42 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 			$payment_url .= "&product_id=".$order_id;
 			$payment_url .= "&product_name=".$product_name;
 			$payment_url .= "&success_url=".$this->get_return_url( $order );
-?>
-<link rel="stylesheet" type="text/css" href="<?php echo plugins_url('css/jquery.fancybox.css', __FILE__) ?>" media="screen" />
-<script type="text/javascript" src="<?php echo plugins_url('js/jquery.fancybox.pack.js', __FILE__) ?>"></script>
 
-<form action="<?php echo $this->notify_url ?>" method="post" id="compropago_payment_form">
-	<?php $woocommerce->nonce_field('compropago_payment_submit') ?>
-	<input type="hidden" name="key" value="<?php echo $order->order_key ?>" />
-	<input type="hidden" name="order" value="<?php echo $order_id ?>" />
-
-	<div class="left"/>
-		<h3 style="margin: 10px;">Para completar la compra dar click en:</h3>
-	</div>
-	<div class="left">
-		<a id="payment_btn" href="#" class=""><img src="<?php echo plugins_url('images/compropago-payment-green-btn.png', __FILE__) ?>" alt="PAGAR"></a>
-	</div>
-	<a class="button cancel" href="<?php echo $order->get_cancel_order_url() ?>"><?php _e('Cancel order &amp; restore cart', 'woocommerce') ?></a>
-</form>
-	<script type='text/javascript'><?php
-	echo "var gateway_compropago='".$payment_url."';";
-?></script>
-	<script type="text/javascript" src="<?php echo plugins_url('js/compropago_z.js', __FILE__) ?>"></script>
-<?php
+			$woocommerce->enqueue_js("
+			jQuery(document).ready(function($) {
+				$.fancybox.open({
+					modal: true,
+					overlayShow: true,
+					hideOnOverlayClick: false,
+					hideOnContentClick: false,
+					enableEscapeButton: false,
+					showCloseButton: false,
+					href : ".$payment_url.",
+					type : 'iframe',
+					padding : 5
+				});
+				$('#payment_btn').click(function(event) {
+					event.preventDefault();
+					$.fancybox.open({
+						modal: true,
+						overlayShow: true,
+						hideOnOverlayClick: false,
+						hideOnContentClick: false,
+						enableEscapeButton: false,
+						showCloseButton: false,
+						href : ".$payment_url.",
+						type : 'iframe',
+						padding : 5
+					});
+				});
+			});");
 		}
 	}
 
 	/**
-	 * notify handler
-	 * @since 2.2.0
-	 */
-	function notify_handler() {
+	* Check for Compropago notification
+	* */
+	function check_compropago_resquest() {
 		global $woocommerce;
 		
 		$body = @file_get_contents('php://input');
@@ -407,54 +398,7 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 				compropago_status_function( $product_id, $status );
 			}
 			echo json_encode( $event_json );
-	}
-
-	
-	/**
-	 * When a store manager or user cancels a subscription in the store, also cancel the subscription with compropago. 
-	 *
-	 * @since 2.0.0
-	 * 
-	 */
-	function cancel_subscriptions_for_order( $order ){
-		global $woocommerce;
-		
-		$request = new compropago_request($this->get_config());
-		$response = $request->send(array('customer'=>$order->id), 'cancel');
-		
-		if($response->success('cancel')) {
-			if ($this->debug=='yes') 
-				$this->log->add( 'compropago', 'Order ID: #' . $order->id .' has been cancelled');
-		} else {
-			$woocommerce->add_error(__('Error! ' . $response->get_error(), 'woocommerce'));
-			if ($this->debug=='yes') 
-				$this->log->add( 'compropago', 'Error! ' . $response->get_error());
 		}
-		
-	}
-	
-	/**
-	 * When a store manager or user reactivates a subscription in the store, also reactivate the subscription with compropago. 
-	 *
-	 * @since 2.0.0
-	 * 
-	 */
-	public static function reactivate_subscription_for_order( $order, $product_id ) {
-		
-	}
-	
-	
-	/**
-	 * Performs an Express Checkout NVP API operation as passed in $api_method.
-	 * 
-	 * Although the compropago Standard API provides no facility for cancelling a subscription, the compropago
-	 * Express Checkout  NVP API can be used.
-	 *
-	 * @since 2.0.0
-	 * 
-	 */
-	public static function change_subscription_status( $profile_id, $new_status ) {
-		
 	}
 	
 	/**

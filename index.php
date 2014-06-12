@@ -17,11 +17,11 @@ function woocommerce_compropago_init() {
 	/**
  	 * Localication
 	 */
-	load_textdomain( 'woocommerce', 'langs/simplepay4u-'.get_locale().'.mo' );
+	load_plugin_textdomain( 'wc_compropago', false, dirname( plugin_basename( __FILE__ ) ) . '/languages' );
 	
-	if(!defined('STRIPE_SDK')) {
-		define('STRIPE_SDK', 1);
-		require_once('wc-gateway-compropago.php');
+	if(!defined('COMPROPAGO_SDK')) {
+		define('COMPROPAGO_SDK', 1);
+		require_once('gateway-compropago.php');
 	}
 	
 	require_once('includes/gateway-request.php');
@@ -31,7 +31,7 @@ function woocommerce_compropago_init() {
  	* Add the Gateway to WooCommerce
  	**/
 	function add_compropago_gateway($methods) {
-		$methods[] = 'WC_Gateway_Compropago';
+		$methods[] = 'woocommerce_compropago';
 		return $methods;
 	}
 	
