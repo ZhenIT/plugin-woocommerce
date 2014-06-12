@@ -20,7 +20,7 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 		
 		$this->id				= 'compropago';
 		$this->method_title 	= __('Compropago', 'woocommerce');
-		$this->icon 			= apply_filters('woocommerce_compropago_icon', plugins_url('/images/compropago.png', __FILE__));
+		$this->icon 			= apply_filters('woocommerce_compropago_icon', plugins_url('/images/compropago_z.png', __FILE__));
 		$this->has_fields 		= false;
 		
 		// Load the form fields
@@ -336,7 +336,7 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 		$public_key = $this->get_config('public_key');
 		$items = $order->get_items();
 		if ( count( $items ) > 0 ) {
-			echo '<p>'.__('Thank you for your order, please wait to pay with Compropago.', 'woocommerce').'</p>';
+			echo '<p>'.__('Muchas gracia por tu compra, esperamos tu pago.', 'woocommerce').'</p>';
 			foreach ( $items as $item ) {
 				if ( is_null( $product_name ) ) {
 					$product_name = $item['name'];
@@ -364,7 +364,7 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 	<?php $woocommerce->nonce_field('compropago_payment_submit') ?>
 	<input type="hidden" name="key" value="<?php echo $order->order_key ?>" />
 	<input type="hidden" name="order" value="<?php echo $order_id ?>" />
-	
+
 	<div class="left"/>
 		<h3 style="margin: 10px;">Para completar la compra dar click en:</h3>
 	</div>
@@ -372,11 +372,11 @@ class WC_Gateway_Compropago extends WC_Payment_Gateway {
 		<a id="payment_btn" href="#" class=""><img src="<?php echo plugins_url('images/compropago-payment-green-btn.png', __FILE__) ?>" alt="PAGAR"></a>
 	</div>
 	<a class="button cancel" href="<?php echo $order->get_cancel_order_url() ?>"><?php _e('Cancel order &amp; restore cart', 'woocommerce') ?></a>
-	
+</form>
 	<script type='text/javascript'><?php
 	echo "var gateway_compropago='".$payment_url."';";
 ?></script>
-	<script type="text/javascript" src="<?php echo plugins_url('js/compropago.js', __FILE__) ?>"></script>
+	<script type="text/javascript" src="<?php echo plugins_url('js/compropago_z.js', __FILE__) ?>"></script>
 <?php
 		}
 	}
